@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from pathlib import Path
+from fastapi import FastAPI
 from pydantic import BaseModel
 from agents import Agent, Runner, OpenAIChatCompletionsModel, AsyncOpenAI
 from agents.mcp import MCPServerStdio
@@ -9,6 +10,9 @@ from dotenv import load_dotenv, find_dotenv
 
 # Load env
 load_dotenv(find_dotenv())
+
+# Get app directory
+APP_DIR = Path(__file__).parent
 
 # Global MCP server and agent
 mcp_server = None
@@ -41,11 +45,12 @@ async def lifespan(app: FastAPI):
         openai_client=external_client,
     )
 
-    # MCP Server
+    # MCP Server - run from app directory
     mcp_server = MCPServerStdio(
         {
             "command": "uv",
             "args": ["run", "python", "mcpserver.py"],
+            "cwd": str(APP_DIR),
         }
     )
 
@@ -57,7 +62,7 @@ async def lifespan(app: FastAPI):
         name="MCP CRUD Assistant",
         model=llm_model,
         mcp_servers=[mcp_server],
-        instructions="You are an intelligent CRUD assistant. Use MCP tools for all CRUD actions. Store and read data only via MCP. Data is stored in data.json. Be concise and helpful.",
+        instructions="You are an intelligent CRUD assistant. Use MCP tools for all CRUD actions. Store and read data only via MCP. Data is stored in PostgreSQL database. Be concise and helpful.",
     )
 
     yield
@@ -71,7 +76,7 @@ app = FastAPI(title="MCP Chatbot API", lifespan=lifespan)
 
 
 @app.post("/items")
-async def create_item(item: ItemInput):
+async def create_item_endpoint(item: ItemInput):
     """Add a new item via MCP agent"""
     result = await Runner.run(
         starting_agent=agent,
@@ -81,7 +86,7 @@ async def create_item(item: ItemInput):
 
 
 @app.get("/items")
-async def list_items():
+async def list_items_endpoint():
     """List all items via MCP agent"""
     result = await Runner.run(
         starting_agent=agent,
@@ -91,7 +96,7 @@ async def list_items():
 
 
 @app.put("/items/{item_id}")
-async def update_item(item_id: str, item: ItemUpdate):
+async def update_item_endpoint(item_id: str, item: ItemUpdate):
     """Update an item by ID via MCP agent"""
     result = await Runner.run(
         starting_agent=agent,
@@ -101,7 +106,7 @@ async def update_item(item_id: str, item: ItemUpdate):
 
 
 @app.delete("/items/{item_id}")
-async def delete_item(item_id: str):
+async def delete_item_endpoint(item_id: str):
     """Delete an item by ID via MCP agent"""
     result = await Runner.run(
         starting_agent=agent,
